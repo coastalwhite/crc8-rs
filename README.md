@@ -21,21 +21,21 @@ This library provides 3 main functions.
 Returns the checksum for a given byte array and a given generator
 polynomial, with the last bit being the Cyclic Redundancy Check.
 
-[docs.rs](https://docs.rs/crc8-rs/1.0.0/crc8-rs/fn.fetch_crc8.html)
+[docs.rs](https://docs.rs/crc8-rs/1.0.0/crc8_rs/fn.fetch_crc8.html)
 
 ### `verify_crc8(bytes: &[u8; N], poly: u8) -> bool`
 
 Verify that the given byte array with the given generator polynomial has a
 checksum of zero.
 
-[docs.rs](https://docs.rs/crc8-rs/1.0.0/crc8-rs/fn.verify_crc8.html)
+[docs.rs](https://docs.rs/crc8-rs/1.0.0/crc8_rs/fn.verify_crc8.html)
 
 ### `insert_crc8(bytes: &[u8; N], poly: u8) -> [u8; N]`
 
 Given a byte array (with the last byte left for the CRC) and a generator
 polynomial, insert the CRC into the last byte of the byte array.
 
-[docs.rs](https://docs.rs/crc8-rs/1.0.0/crc8-rs/fn.insert_crc8.html)
+[docs.rs](https://docs.rs/crc8-rs/1.0.0/crc8_rs/fn.insert_crc8.html)
 
 ## License
 
