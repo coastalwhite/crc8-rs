@@ -1,4 +1,4 @@
-use crc8::{ verify_crc8, insert_crc8 };
+use crc8_rs::{ verify_crc8, insert_crc8 };
 
 fn main() {
     let correct_msg = insert_crc8(b"Hi!\0", 0xD5);

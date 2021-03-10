@@ -8,7 +8,7 @@
 //! ### Inserting and verifying corrupting byte arrays.
 //!
 //! ```
-//! use crc8::{ verify_crc8, insert_crc8 };
+//! use crc8_rs::{ verify_crc8, insert_crc8 };
 //!
 //! const GENERATOR_POLYNOMIAL: u8 = 0xD5;
 //!
@@ -32,7 +32,7 @@
 //! ### Adding a CRC to custom Packet struct
 //!
 //! ```
-//! use crc8::{ fetch_crc8, verify_crc8, concat_byte_arrays };
+//! use crc8_rs::{ fetch_crc8, verify_crc8, concat_byte_arrays };
 //!
 //! const GENERATOR_POLYNOMIAL: u8 = 0xD5;
 //!
@@ -90,7 +90,7 @@ use polynomial::Polynomial;
 ///
 /// # Example
 /// ```
-/// use crc8::{ verify_crc8, insert_crc8 };
+/// use crc8_rs::{ verify_crc8, insert_crc8 };
 ///
 /// const GENERATOR_POLYNOMIAL: u8 = 0xD5;
 ///
@@ -120,7 +120,7 @@ pub fn verify_crc8<const BYTES: usize>(bytes: &[u8; BYTES], poly: u8) -> bool {
 ///
 /// # Example
 /// ```
-/// use crc8::{ fetch_crc8, verify_crc8, concat_byte_arrays };
+/// use crc8_rs::{ fetch_crc8, verify_crc8, concat_byte_arrays };
 ///
 /// const GENERATOR_POLYNOMIAL: u8 = 0xD5;
 ///
@@ -175,7 +175,7 @@ pub fn fetch_crc8<const BYTES: usize>(bytes: &[u8; BYTES], poly: u8) -> u8 {
 ///
 /// # Example
 /// ```
-/// use crc8::{ verify_crc8, insert_crc8 };
+/// use crc8_rs::{ verify_crc8, insert_crc8 };
 ///
 /// const GENERATOR_POLYNOMIAL: u8 = 0xD5;
 ///
@@ -216,7 +216,7 @@ pub fn insert_crc8<const BYTES: usize>(bytes: &[u8; BYTES], poly: u8) -> [u8; BY
 /// # Example
 ///
 /// ```
-/// use crc8::{ concat_byte_arrays };
+/// use crc8_rs::{ concat_byte_arrays };
 ///
 /// let fst_msg = *b"Hi everyone! ";    // Length = 13
 /// let snd_msg = *b"Pretty nifty ehh?"; // Length = 17
