@@ -1,4 +1,4 @@
-# CRC8
+# CRC8-RS
 
 A no_std library for doing 8-bit cyclic redundancy checks. This is mostly meant
 for embedded hardware, but it can be used in a std environment as well. This
@@ -6,6 +6,13 @@ uses const generics from __Rust 15.1__ which is available in stable from __Match
 25th, 2021__, before then you will have to use the __Rust__ beta.
 
 ## Usage
+
+Add this to your project with:
+
+```toml
+[dependencies]
+crc8-rs = "1.0"
+```
 
 This library provides 3 main functions.
 
