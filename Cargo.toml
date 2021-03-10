@@ -2,7 +2,7 @@
 name = "crc8-rs"
 authors = ["Gijs Burghoorn <me@gburghoorn.com>"]
 description = "A no-std library for doing 8-bit cyclic redundancy checks"
-version = "1.0.0"
+version = "1.0.1"
 
 edition = "2018"
 
