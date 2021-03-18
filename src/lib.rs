@@ -1,105 +1,184 @@
-//! A no_std library for doing 8-bit cyclic redundancy checks. This is mostly meant
-//! for embedded hardware, but it can be used in a std environment as well. This
-//! uses const generics from __Rust 15.1__ which is available in stable from __Match
-//! 25th, 2021__, before then you will have to use the __Rust__ beta.
+//! A minimal heapless no_std implementation of 8-bit [cyclic redundancy
+//! checks](https://en.wikipedia.org/wiki/Cyclic_redundancy_check) in Rust. This
+//! allows us to check for the integrity of data, and thus is mostly used when
+//! transferring data over unstable or noisy connections. For example, this is connections with
+//! embedded systems and network connections.
 //!
-//! ## Usage
+//! Take a look at [the documentation](crate).
 //!
-//! ### Inserting and verifying corrupting byte arrays.
+//! # Features
 //!
-//! ```
-//! use crc8_rs::{ verify_crc8, insert_crc8 };
+//! This crate provides the minimal functions needed to properly handle CRC's in an 8-bit
+//! system. The provided functions are [`fetch_crc8`], [`has_valid_crc8`] and [`insert_crc8`]. This
+//! should make handling most of the common CRC situations simple. Because of the minimalist
+//! approach this crate takes, binary size should remain small. This especially fits well on
+//! embedded hardware.
 //!
-//! const GENERATOR_POLYNOMIAL: u8 = 0xD5;
+//! # Usage
 //!
-//! // We add an empty byte at the end for the CRC
-//! let msg = b"Hello World!\0";
-//! let msg = insert_crc8(&msg, GENERATOR_POLYNOMIAL);
+//! Add this to your projects *Cargo.toml* with:
 //!
-//! // Will verify just fine!
-//! assert!(verify_crc8(&msg, GENERATOR_POLYNOMIAL));
-//!
-//! let corrupted_msg = {
-//!     let mut tmp_msg = msg;
-//!     tmp_msg[1] = b'a';
-//!     tmp_msg
-//! };
-//!
-//! // The message is now corrupted and thus it can't verify the integrity!
-//! assert!(!verify_crc8(&corrupted_msg, GENERATOR_POLYNOMIAL));
+//! ```toml
+//! [dependencies]
+//! crc8-rs = "1.1"
 //! ```
 //!
-//! ### Adding a CRC to custom Packet struct
+//! There are generally two ways to use this crate. We can use plain buffers or we wrap CRCs with
+//! [`struct`](https://doc.rust-lang.org/std/keyword.struct.html) methods. Let us go over both
+//! ways.
 //!
+//! ## Using plain buffers
+//!
+//! On the transferring end, we would similar code to the following.
+//!
+//! ```rust
+//! use crc8_rs::{ has_valid_crc8, insert_crc8 };
+//!
+//! // We are given a data buffer we would like to transfer
+//! // It is important to leave a unused byte at the end for the CRC byte
+//! let data: [u8; 256] = [
+//!     // ...snip
+//! # 3; 256
+//! ];
+//!
+//! // We can insert a CRC byte to the data buffer, this will be the last byte
+//! // This time we use the generator polynomial of `0xD5`
+//! let crc_data: [u8; 256] = insert_crc8(data, 0xD5);
+//!
+//! // Now we are able to verify that the CRC is valid
+//! assert!(has_valid_crc8(crc_data, 0xD5));
+//!
+//! // Transfer the data...
 //! ```
-//! use crc8_rs::{ fetch_crc8, verify_crc8, concat_byte_arrays };
 //!
-//! const GENERATOR_POLYNOMIAL: u8 = 0xD5;
+//! Then on the receiving end, we would have code such as the following.
 //!
-//! // We can declare our packets ourselves
+//! ```rust
+//! use crc8_rs::has_valid_crc8;
+//!
+//! // We receive the CRCed data from some source
+//! // This buffer has the CRC byte as the last byte
+//! let crc_data: [u8; 256] = // ...snip
+//! # crc8_rs::insert_crc8([3; 256], 0xD5);
+//!
+//! // Now we can conditionally unpack it and use the data
+//! if has_valid_crc8(crc_data, 0xD5) {
+//!     // The data is contained in the crc_data
+//!     let data = crc_data;
+//!
+//!     // ...snip
+//! } else {
+//!     panic!("CRC is invalid!")
+//! }
+//! ```
+//!
+//! ## Wrapping the CRC
+//!
+//! If we want to form packets from some given data, we may want to append a CRC byte when
+//! transferring the data to verify the data's integrity.
+//!
+//! ```rust
+//! use crc8_rs::insert_crc8;
+//!
+//! // Define a example packet structure
 //! struct Packet {
-//!     header: u8,
-//!     content: [u8; 14],
-//!     crc: u8,
+//!     header:  [u8; 4],
+//!     content: [u8; 247],
+//!     footer:  [u8; 4],
 //! }
 //!
 //! impl Packet {
-//!     fn new(header: u8, content: [u8; 14]) -> Packet {
-//!         let mut pkt = Packet {
-//!             header,
-//!             content,
-//!             crc: 0,
-//!         };
+//!     fn to_data_buffer(&self) -> [u8; 256] {
+//!         let mut data = [0; 256];
+//!         
+//!         // First we insert the packet data into the buffer
+//!         for i in 0..4   { data[i]       = self.header[i] }
+//!         for i in 0..247 { data[i + 4]   = self.content[i] }
+//!         for i in 0..4   { data[i + 251] = self.footer[i] }
 //!
-//!         pkt.crc = GENERATOR_POLYNOMIAL ^ fetch_crc8(
-//!             &pkt.to_bytes(),
-//!             GENERATOR_POLYNOMIAL
-//!         );
-//!         pkt
-//!     }
-//!
-//!     fn to_bytes(&self) -> [u8; 16] {
-//!         concat_byte_arrays::<16, 15, 1>(
-//!             concat_byte_arrays::<15, 1, 14>([self.header], self.content),
-//!             [self.crc]
-//!         )
+//!         // We use the generator polynomial `0xD5` here.
+//!         insert_crc8(data, 0xD5)
 //!     }
 //! }
-//!
-//! assert!(verify_crc8(
-//!     &Packet::new(b'H', *b"ello everyone!").to_bytes(),
-//!     GENERATOR_POLYNOMIAL)
-//! );
+//! # // We add a little test here to make sure everything works.
+//! # let pkt = Packet { header: [0xAB; 4], content: [0xCD; 247], footer: [0xEF; 4] };
+//! # assert!(crc8_rs::has_valid_crc8(pkt.to_data_buffer(), 0xD5));
 //! ```
 //!
+//! Receiving the given buffer is now quite simple.
 //!
-//! ## License
+//! ```rust
+//! use crc8_rs::has_valid_crc8;
 //!
-//! Licensed under a __MIT__ license.
+//! struct ReceivedPacket {
+//!     header:  [u8; 4],
+//!     content: [u8; 247],
+//!     footer:  [u8; 4],
+//! }
+//!
+//! impl ReceivedPacket {
+//!     fn receive(data: [u8; 256]) -> Option<ReceivedPacket> {
+//!         // Before we construct the instance, we first check the CRC
+//!         if has_valid_crc8(data, 0xD6) {
+//!             Some(ReceivedPacket {
+//!                 // ...snip
+//! #               header: {
+//! #                   let mut header = [0; 4];
+//! #                   for i in 0..4 {
+//! #                       header[i] = data[i]
+//! #                   }
+//! #                   header
+//! #               },
+//! #               content: {
+//! #                   let mut content = [0; 247];
+//! #                   for i in 0..247 {
+//! #                       content[i] = data[i + 4]
+//! #                   }
+//! #                   content
+//! #               },
+//! #               footer: {
+//! #                   let mut footer = [0; 4];
+//! #                   for i in 0..4 {
+//! #                       footer[i] = data[i + 251]
+//! #                   }
+//! #                   footer
+//! #               },
+//!             })
+//!         } else {
+//!             None
+//!         }
+//!     }
+//! }
+//! # // We add a little test here to make sure everything works.
+//! # assert!(ReceivedPacket::receive(crc8_rs::insert_crc8([0x42; 256], 0xD6)).is_some());
+//! ```
 
 #![warn(missing_docs)]
 #![no_std]
 
 mod polynomial;
+
 use polynomial::Polynomial;
 
-/// Verify the integrity of the bytes array.
+/// Determine whether a `data` buffer for a given generator `polynomial` has a valid CRC.
 ///
-/// Calculates the Cyclic Redundancy Check for the bytes array and return whether it equals
-/// zero.
+/// Will fetch the CRC value for the `data` buffer under the generator `polynomial` and return
+/// whether it equals zero, which indicates the integrity of the data. It is a short hand for
+/// [`fetch_crc8(data, polynomial) == 0`](crate::fetch_crc8).
 ///
-/// # Example
+/// # Examples
+///
 /// ```
-/// use crc8_rs::{ verify_crc8, insert_crc8 };
+/// use crc8_rs::{ has_valid_crc8, insert_crc8 };
 ///
 /// const GENERATOR_POLYNOMIAL: u8 = 0xD5;
 ///
 /// // We add an empty byte at the end for the CRC
 /// let msg = b"Hello World!\0";
-/// let msg = insert_crc8(&msg, GENERATOR_POLYNOMIAL);
+/// let msg = insert_crc8(*msg, GENERATOR_POLYNOMIAL);
 ///
 /// // Will verify just fine!
-/// assert!(verify_crc8(&msg, GENERATOR_POLYNOMIAL));
+/// assert!(has_valid_crc8(msg, GENERATOR_POLYNOMIAL));
 ///
 /// let corrupted_msg = {
 ///     let mut tmp_msg = msg;
@@ -108,83 +187,101 @@ use polynomial::Polynomial;
 /// };
 ///
 /// // The message is now corrupted and thus it can't verify the integrity!
-/// assert!(!verify_crc8(&corrupted_msg, GENERATOR_POLYNOMIAL));
+/// assert!(!has_valid_crc8(corrupted_msg, GENERATOR_POLYNOMIAL));
 /// ```
-pub fn verify_crc8<const BYTES: usize>(bytes: &[u8; BYTES], poly: u8) -> bool {
-    fetch_crc8(bytes, poly) == 0
+///
+/// # Panics
+///
+/// The function will panic if given a zero-sized buffer. As can be seen in the following example.
+///
+/// ```should_panic
+/// use crc8_rs::has_valid_crc8;
+///
+/// has_valid_crc8([], 0x42);
+/// ```
+pub fn has_valid_crc8<const DATA_SIZE: usize>(data: [u8; DATA_SIZE], polynomial: u8) -> bool {
+    fetch_crc8(data, polynomial) == 0
 }
 
-/// Generate Cyclic Redundancy Check for a given bytes array given a certain generator polynomial.
+/// Get the current CRC of a `data` buffer under a generator `polynomial`.
 ///
-/// Calculates the Cyclic Redundancy Check for the bytes array and returns it.
+/// Calculates the polynomial modulo division of the `data` buffer with the `polynomial`. If we
+/// give a valid CRC appended `data` buffer under `polynomial`, we will get `0` back. The
+/// short-hand of this is the [`has_valid_crc8`] function. When given a null terminated `data`
+/// buffer, the `fetch_crc8(data, polynomial) ^ polynomial` will equal the value needed to be set
+/// as the last byte in order to get a valid CRC signed buffer. The short-hand of this is the
+/// [`insert_crc8`] function.
 ///
-/// # Example
+/// # Examples
+///
 /// ```
-/// use crc8_rs::{ fetch_crc8, verify_crc8, concat_byte_arrays };
-///
-/// const GENERATOR_POLYNOMIAL: u8 = 0xD5;
+/// use crc8_rs::{ insert_crc8, has_valid_crc8 };
 ///
 /// // We can declare our packets ourselves
 /// struct Packet {
 ///     header: u8,
 ///     content: [u8; 14],
-///     crc: u8,
 /// }
 ///
 /// impl Packet {
-///     fn new(header: u8, content: [u8; 14]) -> Packet {
-///         let mut pkt = Packet {
-///             header,
-///             content,
-///             crc: 0,
-///         };
-///
-///         pkt.crc = GENERATOR_POLYNOMIAL ^ fetch_crc8(
-///             &pkt.to_bytes(),
-///             GENERATOR_POLYNOMIAL
-///         );
-///         pkt
-///     }
-///
 ///     fn to_bytes(&self) -> [u8; 16] {
-///         concat_byte_arrays::<16, 15, 1>(
-///             concat_byte_arrays::<15, 1, 14>([self.header], self.content),
-///             [self.crc]
-///         )
+///         let mut data = [0; 16];
+///
+///         // Insert the packet data
+///         data[0] = self.header;
+///         for i in 0..14 { data[i + 1] = self.content[i] }
+///
+///         // Insert the CRC at the end of the buffer
+///         // We use 0xD5 as the generator polynomial here
+///         insert_crc8(data, 0xD5)
 ///     }
 /// }
 ///
-/// assert!(verify_crc8(
-///     &Packet::new(b'H', *b"ello everyone!").to_bytes(),
-///     GENERATOR_POLYNOMIAL)
-/// );
+/// let pkt = Packet {
+///     // ...
+/// # header: b'H',
+/// # content: *b"ello Everyone!",
+/// };
+/// assert!(has_valid_crc8(pkt.to_bytes(), 0xD5));
 /// ```
-pub fn fetch_crc8<const BYTES: usize>(bytes: &[u8; BYTES], poly: u8) -> u8 {
-    let bytes = *bytes;
+///
+/// # Panics
+///
+/// This function will panic when given a zero-sized buffer as can be seen in the following code
+/// snippet.
+///
+/// ```should_panic
+/// use crc8_rs::fetch_crc8;
+///
+/// fetch_crc8([], 0x42);
+/// ```
+pub fn fetch_crc8<const DATA_SIZE: usize>(data: [u8; DATA_SIZE], polynomial: u8) -> u8 {
+    // Fetch the modulo division of the data with the generator polynomial
+    let Polynomial(result_arr) = Polynomial(data) / Polynomial::new_from_byte(polynomial);
 
-    let Polynomial(result_arr) = Polynomial(bytes) / Polynomial::new_from_byte(poly);
-    let last_byte = result_arr[BYTES - 1];
-
-    last_byte
+    // Then return the last byte
+    result_arr[DATA_SIZE - 1]
 }
 
-/// Insert CRC on the last byte of a bytes array so that it can be verified.
+/// Insert CRC byte in the last byte of `data` buffer under a generator `polynomial`.
 ///
 /// This expects a last byte left for the CRC byte, any pre-existing last byte value will be
-/// ignored overwritten in the return value.
+/// ignored and overwritten in the return value. This function is very similar to writing
+/// [`data[data.len() - 1] = polynomial ^ fetch_crc8(data, polynomial)`](fetch_crc8).
 ///
-/// # Example
+/// # Examples
+///
 /// ```
-/// use crc8_rs::{ verify_crc8, insert_crc8 };
+/// use crc8_rs::{ has_valid_crc8, insert_crc8 };
 ///
 /// const GENERATOR_POLYNOMIAL: u8 = 0xD5;
 ///
 /// // We add an empty byte at the end for the CRC
 /// let msg = b"Hello World!\0";
-/// let msg = insert_crc8(&msg, GENERATOR_POLYNOMIAL);
+/// let msg = insert_crc8(*msg, GENERATOR_POLYNOMIAL);
 ///
 /// // Will verify just fine!
-/// assert!(verify_crc8(&msg, GENERATOR_POLYNOMIAL));
+/// assert!(has_valid_crc8(msg, GENERATOR_POLYNOMIAL));
 ///
 /// let corrupted_msg = {
 ///     let mut tmp_msg = msg;
@@ -193,57 +290,29 @@ pub fn fetch_crc8<const BYTES: usize>(bytes: &[u8; BYTES], poly: u8) -> u8 {
 /// };
 ///
 /// // The message is now corrupted and thus it can't verify the integrity!
-/// assert!(!verify_crc8(&corrupted_msg, GENERATOR_POLYNOMIAL));
+/// assert!(!has_valid_crc8(corrupted_msg, GENERATOR_POLYNOMIAL));
 /// ```
-pub fn insert_crc8<const BYTES: usize>(bytes: &[u8; BYTES], poly: u8) -> [u8; BYTES] {
-    let mut bytes = *bytes;
-
+///
+/// # Panics
+///
+/// This function will panic when given a zero-sized buffer as can be seen in the following code
+/// snippet.
+///
+/// ```should_panic
+/// use crc8_rs::insert_crc8;
+///
+/// insert_crc8([], 0x42);
+/// ```
+pub fn insert_crc8<const DATA_SIZE: usize>(
+    mut data: [u8; DATA_SIZE],
+    polynomial: u8,
+) -> [u8; DATA_SIZE] {
     // Set the CRC byte to zero.
-    bytes[BYTES - 1] = 0x00;
+    data[DATA_SIZE - 1] = 0x00;
 
     // Fetch the crc and write to the last byte the byte which turns the crc into zero.
-    bytes[BYTES - 1] = poly ^ fetch_crc8(&bytes, poly);
-
-    bytes
-}
-
-/// Concatenate two byte arrays into one byte array with compile time validation.
-///
-/// Safely concatenate two byte arrays of a given size which using the heap. The generics
-/// arguments are the sizes of the result array, first array and second array,
-/// respectively.
-///
-/// # Example
-///
-/// ```
-/// use crc8_rs::{ concat_byte_arrays };
-///
-/// let fst_msg = *b"Hi everyone! ";    // Length = 13
-/// let snd_msg = *b"Pretty nifty ehh?"; // Length = 17
-///
-/// // Length will be 13 + 17 = 30
-/// let msg = concat_byte_arrays::<30, 13, 17>(fst_msg, snd_msg);
-///
-/// assert_eq!(msg, *b"Hi everyone! Pretty nifty ehh?");
-/// ```
-pub fn concat_byte_arrays<const N: usize, const F: usize, const S: usize>(
-    fst: [u8; F],
-    snd: [u8; S],
-) -> [u8; N] {
-    // Do a compile time const generic bound check
-    let _ = [0; 1][N - F - S];
-
-    let mut result = [0; N];
-
-    for i in 0..F {
-        result[i] = fst[i];
-    }
-
-    for i in 0..S {
-        result[F + i] = snd[i];
-    }
-
-    result
+    data[DATA_SIZE - 1] = polynomial ^ fetch_crc8(data, polynomial);
+    data
 }
 
 #[test]
@@ -259,6 +328,6 @@ fn crc_cycle() {
     for i in 0..test_vectors.len() {
         let test_vector = test_vectors[i];
 
-        assert!(verify_crc8(&insert_crc8(&test_vector, 0xA6), 0xA6));
+        assert!(has_valid_crc8(insert_crc8(test_vector, 0xA6), 0xA6));
     }
 }

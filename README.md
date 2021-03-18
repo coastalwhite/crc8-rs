@@ -1,42 +1,136 @@
-# CRC8-RS
+# crc8-rs
 
-A no_std library for doing 8-bit cyclic redundancy checks. This is mostly meant
-for embedded hardware, but it can be used in a std environment as well. This
-uses const generics from __Rust 15.1__ which is available in stable from __Match
-25th, 2021__, before then you will have to use the __Rust__ beta.
+A minimal heapless no_std implementation of 8-bit [cyclic redundancy
+checks](https://en.wikipedia.org/wiki/Cyclic_redundancy_check) in Rust. This
+allows us to check for the integrity of data, and thus is mostly used when
+transferring data over unstable or noisy connections. For example, this is connections with
+embedded systems and network connections.
+
+Take a look at [the documentation](https://docs.rs/crc8-rs/).
+
+## Features
+
+This crate provides the minimal functions needed to properly handle CRC's in an 8-bit
+system. The provided functions are
+[`fetch_crc8`](https://docs.rs/crc8-rs/1.1.0/crc8_rs/fn.fetch_crc8.html),
+[`has_valid_crc8`](https://docs.rs/crc8-rs/1.1.0/crc8_rs/fn.has_valid_crc8.html)
+and [`insert_crc8`](https://docs.rs/crc8-rs/1.1.0/crc8_rs/fn.insert_crc8.html).
+This
+should make handling most of the common CRC situations simple. Because of the minimalist
+approach this crate takes, binary size should remain small. This especially fits well on
+embedded hardware.
 
 ## Usage
 
-Add this to your project with:
+Add this to your projects *Cargo.toml* with:
 
 ```toml
 [dependencies]
-crc8-rs = "1.0"
+crc8-rs = "1.1"
 ```
 
-This library provides 3 main functions.
+There are generally two ways to use this crate. We can use plain buffers or we wrap CRCs with
+[`struct`](https://doc.rust-lang.org/std/keyword.struct.html) methods. Let us go over both
+ways.
 
-### `fetch_crc8(bytes: &[u8; N], poly: u8) -> u8`
+### Using plain buffers
 
-Returns the checksum for a given byte array and a given generator
-polynomial, with the last bit being the Cyclic Redundancy Check.
+On the transferring end, we would similar code to the following.
 
-[docs.rs](https://docs.rs/crc8-rs/1.0.0/crc8_rs/fn.fetch_crc8.html)
+```rust
+use crc8_rs::{ has_valid_crc8, insert_crc8 };
 
-### `verify_crc8(bytes: &[u8; N], poly: u8) -> bool`
+// We are given a data buffer we would like to transfer
+// It is important to leave a unused byte at the end for the CRC byte
+let data: [u8; 256] = [
+    // ...snip
+];
 
-Verify that the given byte array with the given generator polynomial has a
-checksum of zero.
+// We can insert a CRC byte to the data buffer, this will be the last byte
+// This time we use the generator polynomial of `0xD5`
+let crc_data: [u8; 256] = insert_crc8(data, 0xD5);
 
-[docs.rs](https://docs.rs/crc8-rs/1.0.0/crc8_rs/fn.verify_crc8.html)
+// Now we are able to verify that the CRC is valid
+assert!(has_valid_crc8(crc_data, 0xD5));
 
-### `insert_crc8(bytes: &[u8; N], poly: u8) -> [u8; N]`
+// Transfer the data...
+```
 
-Given a byte array (with the last byte left for the CRC) and a generator
-polynomial, insert the CRC into the last byte of the byte array.
+Then on the receiving end, we would have code such as the following.
 
-[docs.rs](https://docs.rs/crc8-rs/1.0.0/crc8_rs/fn.insert_crc8.html)
+```rust
+use crc8_rs::has_valid_crc8;
+
+// We receive the CRCed data from some source
+// This buffer has the CRC byte as the last byte
+let crc_data: [u8; 256] = // ...snip
+
+// Now we can conditionally unpack it and use the data
+if has_valid_crc8(crc_data, 0xD5) {
+    // The data is contained in the crc_data
+    let data = crc_data;
+
+    // ...snip
+} else {
+    panic!("CRC is invalid!")
+}
+```
+
+### Wrapping the CRC
+
+If we want to form packets from some given data, we may want to append a CRC byte when
+transferring the data to verify the data's integrity.
+
+```rust
+use crc8_rs::insert_crc8;
+
+// Define a example packet structure
+struct Packet {
+    header:  [u8; 4],
+    content: [u8; 247],
+    footer:  [u8; 4],
+}
+
+impl Packet {
+    fn to_data_buffer(&self) -> [u8; 256] {
+        let mut data = [0; 256];
+
+        // First we insert the packet data into the buffer
+        for i in 0..4   { data[i]       = self.header[i] }
+        for i in 0..247 { data[i + 4]   = self.content[i] }
+        for i in 0..4   { data[i + 251] = self.footer[i] }
+
+        // We use the generator polynomial `0xD5` here.
+        insert_crc8(data, 0xD5)
+    }
+}
+```
+
+Receiving the given buffer is now quite simple.
+
+```rust
+use crc8_rs::has_valid_crc8;
+
+struct ReceivedPacket {
+    header:  [u8; 4],
+    content: [u8; 247],
+    footer:  [u8; 4],
+}
+
+impl ReceivedPacket {
+    fn receive(data: [u8; 256]) -> Option<ReceivedPacket> {
+        // Before we construct the instance, we first check the CRC
+        if has_valid_crc8(data, 0xD6) {
+            Some(ReceivedPacket {
+                // ...snip
+            })
+        } else {
+            None
+        }
+    }
+}
+```
 
 ## License
 
-Licensed under a __MIT license__.
+Licensed with a MIT license.
