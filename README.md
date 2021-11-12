@@ -1,5 +1,8 @@
 # crc8-rs
 
+**NOTE: I strongly suggest you use the [crc crate](https://crates.io/crates/crc)
+instead of this crate**
+
 A minimal heapless no_std implementation of 8-bit [cyclic redundancy
 checks](https://en.wikipedia.org/wiki/Cyclic_redundancy_check) in Rust. This
 allows us to check for the integrity of data, and thus is mostly used when

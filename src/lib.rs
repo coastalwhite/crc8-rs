@@ -156,6 +156,11 @@
 #![warn(missing_docs)]
 #![no_std]
 
+//! The configuration used for a CRC-8 Process
+struct Crc8Configuration {
+
+}
+
 mod polynomial;
 
 use polynomial::Polynomial;
